@@ -481,6 +481,41 @@ class Parser : public BaseObject {
  private:
 
   Local<Array> CreateHeaders() {
+    if (num_values_ == 0)
+      return Array::New(env()->isolate(), 0);
+
+    if (fields_[0].on_heap_ == false) {
+      Local<Array> headers = Array::New(env()->isolate(), 4 * num_values_ + 1);
+
+      StringPtr* first = &fields_[0];
+      StringPtr* last = &values_[num_values_ - 1];
+
+      size_t size = (last->str_ - first->str_) + last->size_;
+      Local<String> whole = OneByteString(env()->isolate(), first->str_, size);
+
+      headers->Set(0, whole);
+      for (int i = 0; i < num_values_; i++) {
+        StringPtr* field = &fields_[i];
+        StringPtr* value = &values_[i];
+
+        size_t off = field->str_ - first->str_;
+        headers->Set(4 * i + 1,
+                     Uint32::NewFromUnsigned(env()->isolate(), off));
+        headers->Set(4 * i + 2,
+                     Uint32::NewFromUnsigned(env()->isolate(),
+                                             off + field->size_));
+
+        off = value->str_ - first->str_;
+        headers->Set(4 * i + 3,
+                     Uint32::NewFromUnsigned(env()->isolate(), off));
+        headers->Set(4 * i + 4,
+                     Uint32::NewFromUnsigned(env()->isolate(),
+                                             off + value->size_));
+      }
+
+      return headers;
+    }
+
     // num_values_ is either -1 or the entry # of the last header
     // so num_values_ == 0 means there's a single header
     Local<Array> headers = Array::New(env()->isolate(), 2 * num_values_);

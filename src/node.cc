@@ -3924,6 +3924,13 @@ Environment* CreateEnvironment(Isolate* isolate,
 }
 
 
+static void CountReffedHandles(uv_handle_t* handle, void* arg) {
+  unsigned int* counter = reinterpret_cast<unsigned int*>(arg);
+  if (uv_is_active(handle) && uv_has_ref(handle))
+    (*counter)++;
+}
+
+
 // Entry point for new node instances, also called directly for the main
 // node instance.
 static void StartNodeInstance(void* arg) {
@@ -3981,7 +3988,12 @@ static void StartNodeInstance(void* arg) {
           // event, or after running some callbacks.
           env->reset_callout_count();
           uv_run(event_loop, UV_RUN_NOWAIT);
-          more = uv_loop_alive(event_loop) || env->callout_count() != 0;
+
+          unsigned int reffed_handles = 0;
+          uv_walk(event_loop, CountReffedHandles,
+              reinterpret_cast<void*>(&reffed_handles));
+          more = reffed_handles != 0 || env->callout_count() != 0 ||
+              event_loop->active_reqs[0] != &event_loop->active_reqs;
         }
       } while (more == true);
     }

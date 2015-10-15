@@ -40,6 +40,7 @@ inline AsyncWrap::AsyncWrap(Environment* env,
   v8::TryCatch try_catch;
 
   v8::Local<v8::Value> n = v8::Int32::New(env->isolate(), provider);
+  env->inc_callout_count();
   env->async_hooks_init_function()->Call(object, 1, &n);
 
   if (try_catch.HasCaught())

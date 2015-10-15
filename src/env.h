@@ -452,6 +452,10 @@ class Environment {
   inline char* http_parser_buffer() const;
   inline void set_http_parser_buffer(char* buffer);
 
+  inline unsigned int callout_count() const;
+  inline void reset_callout_count();
+  inline void inc_callout_count();
+
   inline void ThrowError(const char* errmsg);
   inline void ThrowTypeError(const char* errmsg);
   inline void ThrowRangeError(const char* errmsg);
@@ -551,6 +555,7 @@ class Environment {
   uint32_t* heap_statistics_buffer_ = nullptr;
 
   char* http_parser_buffer_;
+  unsigned int callout_count_ = 0;
 
 #define V(PropertyName, TypeName)                                             \
   v8::Persistent<TypeName> PropertyName ## _;

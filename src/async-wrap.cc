@@ -185,6 +185,7 @@ Local<Value> AsyncWrap::MakeCallback(const Local<Function> cb,
   if (has_domain) {
     Local<Value> enter_v = domain->Get(env()->enter_string());
     if (enter_v->IsFunction()) {
+      env()->inc_callout_count();
       enter_v.As<Function>()->Call(domain, 0, nullptr);
       if (try_catch.HasCaught())
         return Undefined(env()->isolate());
@@ -193,12 +194,14 @@ Local<Value> AsyncWrap::MakeCallback(const Local<Function> cb,
 
   if (has_async_queue()) {
     try_catch.SetVerbose(false);
+    env()->inc_callout_count();
     env()->async_hooks_pre_function()->Call(context, 0, nullptr);
     if (try_catch.HasCaught())
       FatalError("node::AsyncWrap::MakeCallback", "pre hook threw");
     try_catch.SetVerbose(true);
   }
 
+  env()->inc_callout_count();
   Local<Value> ret = cb->Call(context, argc, argv);
 
   if (try_catch.HasCaught()) {
@@ -207,6 +210,7 @@ Local<Value> AsyncWrap::MakeCallback(const Local<Function> cb,
 
   if (has_async_queue()) {
     try_catch.SetVerbose(false);
+    env()->inc_callout_count();
     env()->async_hooks_post_function()->Call(context, 0, nullptr);
     if (try_catch.HasCaught())
       FatalError("node::AsyncWrap::MakeCallback", "post hook threw");
@@ -216,6 +220,7 @@ Local<Value> AsyncWrap::MakeCallback(const Local<Function> cb,
   if (has_domain) {
     Local<Value> exit_v = domain->Get(env()->exit_string());
     if (exit_v->IsFunction()) {
+      env()->inc_callout_count();
       exit_v.As<Function>()->Call(domain, 0, nullptr);
       if (try_catch.HasCaught())
         return Undefined(env()->isolate());
@@ -239,6 +244,7 @@ Local<Value> AsyncWrap::MakeCallback(const Local<Function> cb,
 
   tick_info->set_in_tick(true);
 
+  env()->inc_callout_count();
   env()->tick_callback_function()->Call(process, 0, nullptr);
 
   tick_info->set_in_tick(false);

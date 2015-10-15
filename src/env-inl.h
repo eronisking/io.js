@@ -387,6 +387,21 @@ inline void Environment::set_http_parser_buffer(char* buffer) {
   http_parser_buffer_ = buffer;
 }
 
+
+inline unsigned int Environment::callout_count() const {
+  return callout_count_;
+}
+
+
+inline void Environment::reset_callout_count() {
+  callout_count_ = 0;
+}
+
+
+inline void Environment::inc_callout_count() {
+  callout_count_++;
+}
+
 inline Environment* Environment::from_cares_timer_handle(uv_timer_t* handle) {
   return ContainerOf(&Environment::cares_timer_handle_, handle);
 }

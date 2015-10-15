@@ -1015,6 +1015,7 @@ void PromiseRejectCallback(PromiseRejectMessage message) {
   Local<Value> args[] = { event, promise, value };
   Local<Object> process = env->process_object();
 
+  env->inc_callout_count();
   callback->Call(process, ARRAY_SIZE(args), args);
 }
 
@@ -1068,7 +1069,8 @@ Local<Value> MakeCallback(Environment* env,
   if (has_domain) {
     Local<Value> enter_v = domain->Get(env->enter_string());
     if (enter_v->IsFunction()) {
-        enter_v.As<Function>()->Call(domain, 0, nullptr);
+      env->inc_callout_count();
+      enter_v.As<Function>()->Call(domain, 0, nullptr);
       if (try_catch.HasCaught())
         return Undefined(env->isolate());
     }
@@ -1076,16 +1078,19 @@ Local<Value> MakeCallback(Environment* env,
 
   if (has_async_queue) {
     try_catch.SetVerbose(false);
+    env->inc_callout_count();
     env->async_hooks_pre_function()->Call(object, 0, nullptr);
     if (try_catch.HasCaught())
       FatalError("node::MakeCallback", "pre hook threw");
     try_catch.SetVerbose(true);
   }
 
+  env->inc_callout_count();
   Local<Value> ret = callback->Call(recv, argc, argv);
 
   if (has_async_queue) {
     try_catch.SetVerbose(false);
+    env->inc_callout_count();
     env->async_hooks_post_function()->Call(object, 0, nullptr);
     if (try_catch.HasCaught())
       FatalError("node::MakeCallback", "post hook threw");
@@ -1095,6 +1100,7 @@ Local<Value> MakeCallback(Environment* env,
   if (has_domain) {
     Local<Value> exit_v = domain->Get(env->exit_string());
     if (exit_v->IsFunction()) {
+      env->inc_callout_count();
       exit_v.As<Function>()->Call(domain, 0, nullptr);
       if (try_catch.HasCaught())
         return Undefined(env->isolate());
@@ -3971,17 +3977,11 @@ static void StartNodeInstance(void* arg) {
           v8::platform::PumpMessageLoop(default_platform, isolate);
           EmitBeforeExit(env);
 
-          // If there are only unrefed handles left, we need to run an
-          // extra event loop turn to purge the unrefed handles.
-          if (event_loop->active_handles == 0 &&
-              event_loop->handle_queue[0] != event_loop->handle_queue[1])
-            uv_run(event_loop, UV_RUN_NOWAIT);
-
           // Emit `beforeExit` if the loop became alive either after emitting
           // event, or after running some callbacks.
-          more = uv_loop_alive(event_loop);
-          if (uv_run(event_loop, UV_RUN_NOWAIT) != 0)
-            more = true;
+          env->reset_callout_count();
+          uv_run(event_loop, UV_RUN_NOWAIT);
+          more = uv_loop_alive(event_loop) || env->callout_count() != 0;
         }
       } while (more == true);
     }

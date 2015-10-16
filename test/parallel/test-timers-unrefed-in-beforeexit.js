@@ -9,7 +9,7 @@ process.on('beforeExit', () => {
   if (once > 1)
     throw new RangeError('beforeExit should only have been called once!');
 
-  setTimeout(() => {}, 1).unref();
+  setTimeout(() => {}, 1000).unref();
   once++;
 });
 

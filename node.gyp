@@ -15,6 +15,7 @@
     'node_shared_http_parser%': 'false',
     'node_shared_cares%': 'false',
     'node_shared_libuv%': 'false',
+    'node_use_uv_link_t%': 'true',
     'node_use_openssl%': 'true',
     'node_shared_openssl%': 'false',
     'node_v8_options%': '',
@@ -352,6 +353,33 @@
           'conditions': [
             ['openssl_fips != ""', {
               'defines': [ 'NODE_FIPS_MODE' ],
+            }],
+            [ 'node_use_uv_link_t=="true"', {
+              'dependencies': [
+                'deps/uv_link_t/uv_link_t.gyp:uv_link_t',
+              ],
+              # -force_load or --whole-archive are not applicable for
+              # the static library
+              'conditions': [
+                [ 'node_target_type!="static_library"', {
+                  'xcode_settings': {
+                    'OTHER_LDFLAGS': [
+                      '-Wl,-force_load,<(PRODUCT_DIR)/libuv_link_t.a',
+                    ],
+                  },
+                  'conditions': [
+                    ['OS in "linux freebsd" and node_shared=="false"', {
+                      'ldflags': [
+                        '-Wl,--whole-archive,'
+                            '<(PRODUCT_DIR)/obj.target/deps/openssl/'
+                            'libuv_link_t.a'
+                        '-Wl,--no-whole-archive',
+                      ],
+                    }],
+                    # TODO(indutny): windows .def?
+                  ],
+                }],
+              ],
             }],
             [ 'node_shared_openssl=="false"', {
               'dependencies': [

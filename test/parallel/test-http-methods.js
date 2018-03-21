@@ -54,6 +54,7 @@ const methods = [
   'MERGE',
   'M-SEARCH',
   'NOTIFY',
+  'SOURCE',
   'SUBSCRIBE',
   'UNSUBSCRIBE',
   'PATCH',

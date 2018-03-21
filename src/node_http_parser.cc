@@ -282,7 +282,7 @@ class Parser : public AsyncWrap, public StreamListener {
     argv[A_VERSION_MINOR] = Integer::New(env()->isolate(), parser_.http_minor);
 
     argv[A_SHOULD_KEEP_ALIVE] =
-        Boolean::New(env()->isolate(), http_should_keep_alive(&parser_));
+        Boolean::New(env()->isolate(), http_parser_should_keep_alive(&parser_));
 
     argv[A_UPGRADE] = Boolean::New(env()->isolate(), parser_.upgrade);
 
@@ -439,19 +439,24 @@ class Parser : public AsyncWrap, public StreamListener {
     CHECK(parser->current_buffer_.IsEmpty());
     parser->got_exception_ = false;
 
-    int rv = http_parser_execute(&(parser->parser_), &settings, nullptr, 0);
+    int rv = parser->got_error_ ? 0 : http_parser_finish(&(parser->parser_));
 
     if (parser->got_exception_)
       return;
 
     if (rv != 0) {
-      enum http_errno err = HTTP_PARSER_ERRNO(&parser->parser_);
+      parser->got_error_ = true;
+
+      enum http_parser_errno http_err =
+        static_cast<enum http_parser_errno>(rv);
 
       Local<Value> e = Exception::Error(env->parse_error_string());
       Local<Object> obj = e.As<Object>();
       obj->Set(env->bytes_parsed_string(), Integer::New(env->isolate(), 0));
       obj->Set(env->code_string(),
-               OneByteString(env->isolate(), http_errno_name(err)));
+               OneByteString(env->isolate(), http_parser_errno_name(http_err)));
+      obj->Set(env->reason_string(),
+               OneByteString(env->isolate(), parser->parser_.reason));
 
       args.GetReturnValue().Set(e);
     }
@@ -482,7 +487,8 @@ class Parser : public AsyncWrap, public StreamListener {
     ASSIGN_OR_RETURN_UNWRAP(&parser, args.Holder());
     // Should always be called from the same context.
     CHECK_EQ(env, parser->env());
-    http_parser_pause(&parser->parser_, should_pause);
+    // XXX(indutny): implement me
+    // http_parser_pause(&parser->parser_, should_pause);
   }
 
 
@@ -575,8 +581,8 @@ class Parser : public AsyncWrap, public StreamListener {
     current_buffer_data_ = data;
     got_exception_ = false;
 
-    size_t nparsed =
-      http_parser_execute(&parser_, &settings, data, len);
+    int err = got_error_ ? 0 : http_parser_execute(&parser_, data, data + len);
+    size_t nparsed = err == 0 ? len : parser_.error_pos - data;
 
     Save();
 
@@ -593,13 +599,17 @@ class Parser : public AsyncWrap, public StreamListener {
     // If there was a parse error in one of the callbacks
     // TODO(bnoordhuis) What if there is an error on EOF?
     if (!parser_.upgrade && nparsed != len) {
-      enum http_errno err = HTTP_PARSER_ERRNO(&parser_);
+      enum http_parser_errno http_err =
+        static_cast<enum http_parser_errno>(err);
 
+      got_error_ = true;
       Local<Value> e = Exception::Error(env()->parse_error_string());
       Local<Object> obj = e->ToObject(env()->isolate());
       obj->Set(env()->bytes_parsed_string(), nparsed_obj);
-      obj->Set(env()->code_string(),
-               OneByteString(env()->isolate(), http_errno_name(err)));
+      obj->Set(env()->code_string(), OneByteString(env()->isolate(),
+               http_parser_errno_name(http_err)));
+      obj->Set(env()->reason_string(),
+               OneByteString(env()->isolate(), parser_.reason));
 
       return scope.Escape(e);
     }
@@ -657,7 +667,11 @@ class Parser : public AsyncWrap, public StreamListener {
 
 
   void Init(enum http_parser_type type) {
-    http_parser_init(&parser_, type);
+    got_error_ = false;
+    http_parser_init(&parser_);
+    http_parser_set_type(&parser_, type);
+    http_parser_set_settings(&parser_, &settings);
+
     url_.Reset();
     status_message_.Reset();
     num_fields_ = 0;
@@ -667,7 +681,7 @@ class Parser : public AsyncWrap, public StreamListener {
   }
 
 
-  http_parser parser_;
+  http_parser_t parser_;
   StringPtr fields_[32];  // header fields
   StringPtr values_[32];  // header values
   StringPtr url_;
@@ -676,6 +690,7 @@ class Parser : public AsyncWrap, public StreamListener {
   size_t num_values_;
   bool have_flushed_;
   bool got_exception_;
+  bool got_error_;
   Local<Object> current_buffer_;
   size_t current_buffer_len_;
   char* current_buffer_data_;
@@ -685,7 +700,7 @@ class Parser : public AsyncWrap, public StreamListener {
   template <typename Parser, Parser> struct Proxy;
   template <typename Parser, typename ...Args, int (Parser::*Member)(Args...)>
   struct Proxy<int (Parser::*)(Args...), Member> {
-    static int Raw(http_parser* p, Args ... args) {
+    static int Raw(http_parser_t* p, Args ... args) {
       Parser* parser = ContainerOf(&Parser::parser_, p);
       return (parser->*Member)(std::forward<Args>(args)...);
     }
@@ -694,10 +709,10 @@ class Parser : public AsyncWrap, public StreamListener {
   typedef int (Parser::*Call)();
   typedef int (Parser::*DataCall)(const char* at, size_t length);
 
-  static const struct http_parser_settings settings;
+  static const http_parser_settings_t settings;
 };
 
-const struct http_parser_settings Parser::settings = {
+const http_parser_settings_t Parser::settings = {
   Proxy<Call, &Parser::on_message_begin>::Raw,
   Proxy<DataCall, &Parser::on_url>::Raw,
   Proxy<DataCall, &Parser::on_status>::Raw,

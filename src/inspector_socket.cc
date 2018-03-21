@@ -418,8 +418,10 @@ class HttpHandler : public ProtocolHandler {
   explicit HttpHandler(InspectorSocket* inspector, TcpHolder::Pointer tcp)
                        : ProtocolHandler(inspector, std::move(tcp)),
                          parsing_value_(false) {
-    http_parser_init(&parser_, HTTP_REQUEST);
+    http_parser_init(&parser_);
+    http_parser_set_type(&parser_, HTTP_REQUEST);
     http_parser_settings_init(&parser_settings);
+    http_parser_set_settings(&parser_, &parser_settings);
     parser_settings.on_header_field = OnHeaderField;
     parser_settings.on_header_value = OnHeaderValue;
     parser_settings.on_message_complete = OnMessageComplete;
@@ -463,9 +465,10 @@ class HttpHandler : public ProtocolHandler {
   }
 
   void OnData(std::vector<char>* data) override {
-    http_parser_execute(&parser_, &parser_settings, data->data(), data->size());
+    http_parser_execute(&parser_, data->data(),
+        data->data() + data->size());
     data->clear();
-    if (parser_.http_errno != HPE_OK) {
+    if (parser_.error != HPE_OK) {
       CancelHandshake();
     }
     // Event handling may delete *this
@@ -503,7 +506,8 @@ class HttpHandler : public ProtocolHandler {
     handler->inspector()->SwitchProtocol(nullptr);
   }
 
-  static int OnHeaderValue(http_parser* parser, const char* at, size_t length) {
+  static int OnHeaderValue(http_parser_t* parser, const char* at,
+                           size_t length) {
     static const char SEC_WEBSOCKET_KEY_HEADER[] = "Sec-WebSocket-Key";
     HttpHandler* handler = From(parser);
     handler->parsing_value_ = true;
@@ -517,7 +521,8 @@ class HttpHandler : public ProtocolHandler {
     return 0;
   }
 
-  static int OnHeaderField(http_parser* parser, const char* at, size_t length) {
+  static int OnHeaderField(http_parser_t* parser, const char* at,
+                           size_t length) {
     HttpHandler* handler = From(parser);
     if (handler->parsing_value_) {
       handler->parsing_value_ = false;
@@ -527,17 +532,17 @@ class HttpHandler : public ProtocolHandler {
     return 0;
   }
 
-  static int OnPath(http_parser* parser, const char* at, size_t length) {
+  static int OnPath(http_parser_t* parser, const char* at, size_t length) {
     HttpHandler* handler = From(parser);
     handler->path_.append(at, length);
     return 0;
   }
 
-  static HttpHandler* From(http_parser* parser) {
+  static HttpHandler* From(http_parser_t* parser) {
     return node::ContainerOf(&HttpHandler::parser_, parser);
   }
 
-  static int OnMessageComplete(http_parser* parser) {
+  static int OnMessageComplete(http_parser_t* parser) {
     // Event needs to be fired after the parser is done.
     HttpHandler* handler = From(parser);
     handler->events_.push_back(HttpEvent(handler->path_, parser->upgrade,
@@ -552,8 +557,8 @@ class HttpHandler : public ProtocolHandler {
   }
 
   bool parsing_value_;
-  http_parser parser_;
-  http_parser_settings parser_settings;
+  http_parser_t parser_;
+  http_parser_settings_t parser_settings;
   std::vector<HttpEvent> events_;
   std::string current_header_;
   std::string ws_key_;

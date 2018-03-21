@@ -132,7 +132,7 @@ if (common.hasCrypto) { // eslint-disable-line crypto-check
 
 {
   const HTTPParser = process.binding('http_parser').HTTPParser;
-  testInitialized(new HTTPParser(), 'HTTPParser');
+  testInitialized(new HTTPParser(HTTPParser.REQUEST), 'HTTPParser');
 }
 
 

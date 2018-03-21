@@ -439,14 +439,12 @@ class Parser : public AsyncWrap, public StreamListener {
     CHECK(parser->current_buffer_.IsEmpty());
     parser->got_exception_ = false;
 
-    int rv = parser->got_error_ ? 0 : http_parser_finish(&(parser->parser_));
+    int rv = http_parser_finish(&(parser->parser_));
 
     if (parser->got_exception_)
       return;
 
     if (rv != 0) {
-      parser->got_error_ = true;
-
       enum http_parser_errno http_err =
         static_cast<enum http_parser_errno>(rv);
 
@@ -581,7 +579,7 @@ class Parser : public AsyncWrap, public StreamListener {
     current_buffer_data_ = data;
     got_exception_ = false;
 
-    int err = got_error_ ? 0 : http_parser_execute(&parser_, data, data + len);
+    int err = http_parser_execute(&parser_, data, data + len);
     size_t nparsed = err == 0 ? len : parser_.error_pos - data;
 
     Save();
@@ -598,11 +596,10 @@ class Parser : public AsyncWrap, public StreamListener {
     Local<Integer> nparsed_obj = Integer::New(env()->isolate(), nparsed);
     // If there was a parse error in one of the callbacks
     // TODO(bnoordhuis) What if there is an error on EOF?
-    if (!parser_.upgrade && nparsed != len) {
+    if (!parser_.upgrade && err != 0) {
       enum http_parser_errno http_err =
         static_cast<enum http_parser_errno>(err);
 
-      got_error_ = true;
       Local<Value> e = Exception::Error(env()->parse_error_string());
       Local<Object> obj = e->ToObject(env()->isolate());
       obj->Set(env()->bytes_parsed_string(), nparsed_obj);
@@ -667,7 +664,6 @@ class Parser : public AsyncWrap, public StreamListener {
 
 
   void Init(enum http_parser_type type) {
-    got_error_ = false;
     http_parser_init(&parser_);
     http_parser_set_type(&parser_, type);
     http_parser_set_settings(&parser_, &settings);
@@ -690,7 +686,6 @@ class Parser : public AsyncWrap, public StreamListener {
   size_t num_values_;
   bool have_flushed_;
   bool got_exception_;
-  bool got_error_;
   Local<Object> current_buffer_;
   size_t current_buffer_len_;
   char* current_buffer_data_;

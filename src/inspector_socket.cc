@@ -467,6 +467,10 @@ class HttpHandler : public ProtocolHandler {
   void OnData(std::vector<char>* data) override {
     http_parser_execute(&parser_, data->data(),
         data->data() + data->size());
+    if (parser_.error == HPE_PAUSED_UPGRADE) {
+      http_parser_resume_after_upgrade(&parser_);
+    }
+
     data->clear();
     if (parser_.error != HPE_OK) {
       CancelHandshake();

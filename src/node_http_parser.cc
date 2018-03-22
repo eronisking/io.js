@@ -581,6 +581,10 @@ class Parser : public AsyncWrap, public StreamListener {
 
     int err = http_parser_execute(&parser_, data, data + len);
     size_t nparsed = err == 0 ? len : parser_.error_pos - data;
+    if (err == HPE_PAUSED_UPGRADE) {
+      http_parser_resume_after_upgrade(&parser_);
+      err = 0;
+    }
 
     Save();
 

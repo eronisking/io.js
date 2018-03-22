@@ -71,7 +71,8 @@ enum http_parser_errno {
   HPE_CB_MESSAGE_COMPLETE = 17,
   HPE_CB_CHUNK_HEADER = 18,
   HPE_CB_CHUNK_COMPLETE = 19,
-  HPE_PAUSED = 20
+  HPE_PAUSED = 20,
+  HPE_PAUSED_UPGRADE = 21
 };
 
 enum http_parser_flags {
@@ -156,6 +157,7 @@ enum http_parser_method {
   XX(18, CB_CHUNK_HEADER, CB_CHUNK_HEADER) \
   XX(19, CB_CHUNK_COMPLETE, CB_CHUNK_COMPLETE) \
   XX(20, PAUSED, PAUSED) \
+  XX(21, PAUSED_UPGRADE, PAUSED_UPGRADE) \
 
 
 #define HTTP_METHOD_MAP(XX) \
@@ -237,6 +239,8 @@ void http_parser_settings_init(http_parser_settings_t* settings);
 int http_parser_message_needs_eof(const http_parser_t* parser);
 int http_parser_should_keep_alive(const http_parser_t* parser);
 int http_parser_finish(http_parser_t* parser);
+void http_parser_resume(http_parser_t* parser);
+void http_parser_resume_after_upgrade(http_parser_t* parser);
 
 const char* http_parser_errno_name(enum http_parser_errno err);
 

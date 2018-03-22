@@ -485,8 +485,9 @@ class Parser : public AsyncWrap, public StreamListener {
     ASSIGN_OR_RETURN_UNWRAP(&parser, args.Holder());
     // Should always be called from the same context.
     CHECK_EQ(env, parser->env());
-    // XXX(indutny): implement me
-    // http_parser_pause(&parser->parser_, should_pause);
+    parser->paused_ = should_pause;
+    if (!should_pause)
+      http_parser_resume(&parser->parser_);
   }
 
 
@@ -678,6 +679,7 @@ class Parser : public AsyncWrap, public StreamListener {
     num_values_ = 0;
     have_flushed_ = false;
     got_exception_ = false;
+    paused_ = false;
   }
 
 
@@ -690,6 +692,7 @@ class Parser : public AsyncWrap, public StreamListener {
   size_t num_values_;
   bool have_flushed_;
   bool got_exception_;
+  bool paused_;
   Local<Object> current_buffer_;
   size_t current_buffer_len_;
   char* current_buffer_data_;
@@ -701,7 +704,12 @@ class Parser : public AsyncWrap, public StreamListener {
   struct Proxy<int (Parser::*)(Args...), Member> {
     static int Raw(http_parser_t* p, Args ... args) {
       Parser* parser = ContainerOf(&Parser::parser_, p);
-      return (parser->*Member)(std::forward<Args>(args)...);
+      int err = (parser->*Member)(std::forward<Args>(args)...);
+      if (err != 0)
+        return err;
+      if (parser->paused_)
+        return HPE_PAUSED;
+      return 0;
     }
   };
 
